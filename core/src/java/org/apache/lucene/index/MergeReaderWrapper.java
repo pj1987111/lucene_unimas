@@ -26,6 +26,7 @@ import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.TermVectorsReader;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
 
 /** This is a hack to make index sorting fast, with a {@link LeafReader} that always returns merge instances when you ask for the codec readers. */
 class MergeReaderWrapper extends LeafReader {
@@ -262,5 +263,10 @@ class MergeReaderWrapper extends LeafReader {
   @Override
   public Sort getIndexSort() {
     return in.getIndexSort();
+  }
+
+  @Override
+  public FieldBplusTree getFieldIndex(String field) {
+    return in.getFieldIndex(field);
   }
 }

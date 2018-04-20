@@ -26,6 +26,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.AttributeSource;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
 
 /**  A <code>FilterLeafReader</code> contains another LeafReader, which it
  * uses as its basic source of data, possibly transforming the data along the
@@ -487,5 +488,10 @@ public abstract class FilterLeafReader extends LeafReader {
   /** Returns the wrapped {@link LeafReader}. */
   public LeafReader getDelegate() {
     return in;
+  }
+
+  @Override
+  public FieldBplusTree getFieldIndex(String field) {
+    return in.getFieldIndex(field);
   }
 }

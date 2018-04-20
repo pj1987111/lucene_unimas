@@ -28,6 +28,7 @@ import java.util.TreeMap;
 
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
 
 /** An {@link LeafReader} which reads multiple, parallel indexes.  Each index
  * added must have the same number of documents, but typically each contains
@@ -453,6 +454,13 @@ public class ParallelLeafReader extends LeafReader {
   @Override
   public Sort getIndexSort() {
     return indexSort;
+  }
+
+  @Override
+  public FieldBplusTree getFieldIndex(String field) {
+    if(parallelReaders.length>0)
+      return parallelReaders[0].getFieldIndex(field);
+    return null;
   }
 
 }

@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import static org.apache.lucene.util.unimas.PathUtil.*;
+
 /**
  * Directory implementation that delegates calls to another directory.
  * This class can be used to add limitations on top of an existing
@@ -73,35 +75,20 @@ public abstract class FilterDirectory extends Directory {
 
     @Override
     public void deleteFile(String name) throws IOException {
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION) || name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        || name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         tempDir.deleteFile(name);
     }
 
     @Override
     public long fileLength(String name) throws IOException {
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION) || name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        || name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         return tempDir.fileLength(name);
     }
 
     @Override
     public IndexOutput createOutput(String name, IOContext context)
             throws IOException {
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION) || name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        || name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         return tempDir.createOutput(name, context);
     }
 
@@ -112,15 +99,10 @@ public abstract class FilterDirectory extends Directory {
 
     @Override
     public void sync(Collection<String> names) throws IOException {
-        List<String> newPathDocValues = null;
+        List<String> newPathDocValues = new ArrayList<>();
         List<String> others = new ArrayList<>();
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0) {
-            newPathDocValues = new ArrayList<>();
-        }
         for (String name : names) {
-            if(newPathDocValues!=null &&
-                    (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION) || name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                            || name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
+            if(isDocValuesOrIndexFiles(name)) {
                 newPathDocValues.add(name);
             } else
                 others.add(name);
@@ -144,12 +126,7 @@ public abstract class FilterDirectory extends Directory {
     @Override
     public IndexInput openInput(String name, IOContext context)
             throws IOException {
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION) || name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        || name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         return tempDir.openInput(name, context);
     }
 

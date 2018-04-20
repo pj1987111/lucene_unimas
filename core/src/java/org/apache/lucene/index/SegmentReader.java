@@ -32,6 +32,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
 
 /**
  * IndexReader implementation over a single segment. 
@@ -323,5 +324,10 @@ public final class SegmentReader extends CodecReader {
   @Override
   public Sort getIndexSort() {
     return si.info.getIndexSort();
+  }
+
+  @Override
+  public FieldBplusTree getFieldIndex(String field) {
+    return core.fieldIndex.get(field);
   }
 }

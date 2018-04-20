@@ -62,6 +62,7 @@ import static org.apache.lucene.codecs.lucene54.Lucene54DocValuesFormat.*;
 
 /** reader for {@link Lucene54DocValuesFormat} */
 final class Lucene54DocValuesProducer extends DocValuesProducer implements Closeable {
+  private final String segmentName;
   private final Map<String,NumericEntry> numerics = new HashMap<>();
   private final Map<String,BinaryEntry> binaries = new HashMap<>();
   private final Map<String,SortedSetEntry> sortedSets = new HashMap<>();
@@ -97,10 +98,12 @@ final class Lucene54DocValuesProducer extends DocValuesProducer implements Close
     addressInstances.putAll(original.addressInstances);
     reverseIndexInstances.putAll(original.reverseIndexInstances);
     merging = true;
+    segmentName = original.segmentName;
   }
 
   /** expert: instantiates a new reader */
   Lucene54DocValuesProducer(SegmentReadState state, String dataCodec, String dataExtension, String metaCodec, String metaExtension) throws IOException {
+    segmentName = state.segmentInfo.name;
     String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
     this.maxDoc = state.segmentInfo.maxDoc();
     merging = false;

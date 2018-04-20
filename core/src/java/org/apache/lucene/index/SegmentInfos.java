@@ -17,37 +17,20 @@
 package org.apache.lucene.index;
 
 
+import org.apache.lucene.codecs.*;
+import org.apache.lucene.store.*;
+import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.StringHelper;
+import org.apache.lucene.util.Version;
+import org.apache.lucene.util.unimas.PathUtil;
+
 import java.io.EOFException;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Map;
-import java.util.Set;
-
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.CodecUtil;
-import org.apache.lucene.codecs.DocValuesFormat;
-import org.apache.lucene.codecs.FieldInfosFormat;
-import org.apache.lucene.codecs.LiveDocsFormat;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.DataInput;
-import org.apache.lucene.store.DataOutput;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.StringHelper;
-import org.apache.lucene.util.Version;
 
 /**
  * A collection of segmentInfo objects with methods for operating on those
@@ -157,6 +140,8 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
      * Opaque Map&lt;String, String&gt; that user can specify during IndexWriter.commit
      */
     public Map<String, String> userData = Collections.emptyMap();
+    public static String indexName;
+    public static String shardName;
 
     private List<SegmentCommitInfo> segments = new ArrayList<>();
 
@@ -431,7 +416,8 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
         } else {
             infos.userData = Collections.unmodifiableMap(input.readStringStringMap());
         }
-
+        indexName = infos.userData.get("indexName");
+        shardName = infos.userData.get("shardName");
         CodecUtil.checkFooter(input);
 
         // LUCENE-6299: check we are in bounds
@@ -581,6 +567,11 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
                 out.writeInt(e.getKey());
                 out.writeSetOfStrings(e.getValue());
             }
+        }
+        Map.Entry<String, String> indexNameAndShard = PathUtil.getIndexNameAndShard(directory.toString());
+        if(indexNameAndShard!=null) {
+            userData.put("indexName", indexNameAndShard.getKey());
+            userData.put("shardName", indexNameAndShard.getValue());
         }
         out.writeMapOfStrings(userData);
         CodecUtil.writeFooter(out);

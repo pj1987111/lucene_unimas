@@ -28,6 +28,7 @@ import org.apache.lucene.codecs.StoredFieldsReader;
 import org.apache.lucene.codecs.TermVectorsReader;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
 
 /**
  * Wraps arbitrary readers for merging. Note that this can cause slow
@@ -135,6 +136,11 @@ public final class SlowCodecReaderWrapper {
         @Override
         public Sort getIndexSort() {
           return reader.getIndexSort();
+        }
+
+        @Override
+        public FieldBplusTree getFieldIndex(String field) {
+          return reader.getFieldIndex(field);
         }
       };
     }

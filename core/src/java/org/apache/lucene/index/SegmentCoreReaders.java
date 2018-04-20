@@ -17,28 +17,25 @@
 package org.apache.lucene.index;
 
 
-import java.io.EOFException;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.NoSuchFileException;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.codecs.FieldsProducer;
-import org.apache.lucene.codecs.NormsProducer;
-import org.apache.lucene.codecs.PointsReader;
-import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.codecs.StoredFieldsReader;
-import org.apache.lucene.codecs.TermVectorsReader;
+import org.apache.lucene.codecs.*;
 import org.apache.lucene.index.LeafReader.CoreClosedListener;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.CloseableThreadLocal;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.unimas.index.BplusTreeProducer;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
+
+import java.io.EOFException;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.file.NoSuchFileException;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Holds core readers that are shared (unchanged) when
  * SegmentReader is cloned or reopened */
@@ -60,6 +57,7 @@ final class SegmentCoreReaders {
   final PointsReader pointsReader;
   final Directory cfsReader;
   final String segment;
+  final Map<String, FieldBplusTree> fieldIndex;
   /** 
    * fieldinfos for this core: means gen=-1.
    * this is the exact fieldinfos these codec components saw at write.
@@ -135,6 +133,8 @@ final class SegmentCoreReaders {
       } else {
         pointsReader = null;
       }
+
+      fieldIndex = new BplusTreeProducer(segmentReadState).getFieldIndex();
       success = true;
     } catch (EOFException | FileNotFoundException e) {
       throw new CorruptIndexException("Problem reading index from " + dir, dir.toString(), e);

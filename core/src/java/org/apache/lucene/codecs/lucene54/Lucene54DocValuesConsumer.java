@@ -17,36 +17,26 @@
 package org.apache.lucene.codecs.lucene54;
 
 
-import java.io.Closeable; // javadocs
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.file.Paths;
-import java.util.*;
-import java.util.stream.StreamSupport;
-
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.DocValuesConsumer;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.RAMOutputStream;
-import org.apache.lucene.store.SimpleFSDirectory;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.LongsRef;
-import org.apache.lucene.util.MathUtil;
-import org.apache.lucene.util.PagedBytes;
+import org.apache.lucene.util.*;
 import org.apache.lucene.util.PagedBytes.PagedBytesDataInput;
-import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.packed.DirectMonotonicWriter;
 import org.apache.lucene.util.packed.DirectWriter;
 import org.apache.lucene.util.packed.MonotonicBlockPackedWriter;
 import org.apache.lucene.util.packed.PackedInts;
-import org.apache.lucene.util.unimas.PathUtil;
+import org.apache.lucene.util.unimas.index.BplusTreeHelper;
+import org.apache.lucene.util.unimas.index.FieldBplusTree;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.*;
+import java.util.stream.StreamSupport;
 
 import static org.apache.lucene.codecs.lucene54.Lucene54DocValuesFormat.*;
 
@@ -67,9 +57,7 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
     }
 
     IndexOutput data, meta;
-    //  Map<String, IndexOutput> docValuesIndex;
-//    IndexOutput index;
-    FileOutputStream index;
+    Map<String, FieldBplusTree> fieldIndex = new HashMap<>();
     final int maxDoc;
 
     /**
@@ -81,13 +69,12 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
             String dataName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, dataExtension);
             data = state.directory.createOutput(dataName, state.context);
             CodecUtil.writeIndexHeader(data, dataCodec, Lucene54DocValuesFormat.VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
+
             String metaName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, metaExtension);
             meta = state.directory.createOutput(metaName, state.context);
             CodecUtil.writeIndexHeader(meta, metaCodec, Lucene54DocValuesFormat.VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
             maxDoc = state.segmentInfo.maxDoc();
-            String indexName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, INDEX_EXTENSION);
-//            index = state.directory.createOutput(indexName, state.context);
-            index = new FileOutputStream(new File(PathUtil.newPath+"/"+indexName));
+            initFieldIndex(fieldIndex, state);
             success = true;
         } finally {
             if (!success) {
@@ -96,9 +83,25 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
         }
     }
 
+    private void initFieldIndex(Map<String, FieldBplusTree> fieldIndex, SegmentWriteState state) throws IOException {
+        fieldIndex.put("name", initSingleBplusTree("name", FieldBplusTree.FieldType.STRING, state));
+        fieldIndex.put("create", initSingleBplusTree("create", FieldBplusTree.FieldType.INTEGER, state));
+        fieldIndex.put("age", initSingleBplusTree("age", FieldBplusTree.FieldType.INTEGER, state));
+    }
+
+    private FieldBplusTree initSingleBplusTree(String fieldName, FieldBplusTree.FieldType fieldType,
+                                               SegmentWriteState state) throws IOException {
+        String indexName = IndexFileNames.segmentFileName(state.segmentInfo.name,
+                state.segmentSuffix+"_"+fieldName, INDEX_EXTENSION);
+        IndexOutput indexOutput = state.directory.createOutput(indexName, state.context);
+        return new FieldBplusTree(fieldType, indexOutput);
+    }
+
     @Override
     public void addNumericField(FieldInfo field, Iterable<Number> values) throws IOException {
         addNumericField(field, values, NumberType.VALUE);
+        //写B+树
+        BplusTreeHelper.addValues(fieldIndex, field.name, values);
     }
 
     void addNumericField(FieldInfo field, Iterable<Number> values, NumberType numberType) throws IOException {
@@ -148,9 +151,6 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
                         }
                     }
                 }
-
-                String writeVal = field.name+"+val:"+v+"+docid:"+count+"\n";
-                index.write(writeVal.getBytes(), 0, writeVal.length());
                 ++count;
             }
         } else {
@@ -161,9 +161,6 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
                 }
                 minValue = Math.min(minValue, v);
                 maxValue = Math.max(maxValue, v);
-
-                String writeVal = field.name+"_position:"+v+"+docid:"+count+"\n";
-                index.write(writeVal.getBytes(), 0, writeVal.length());
                 ++count;
             }
         }
@@ -389,11 +386,6 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
             maxLength = Math.max(maxLength, length);
             if (v != null) {
                 data.writeBytes(v.bytes, v.offset, v.length);
-//                index.writeBytes(field.name.getBytes(), field.name.length());
-//                index.writeBytes(v.bytes, v.offset, v.length);
-//                index.writeLong(count);
-                String writeVal = field.name+"+"+v.utf8ToString()+"\n";
-                index.write(writeVal.getBytes(), 0, writeVal.length());
             }
             count++;
         }
@@ -601,16 +593,20 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
         meta.writeByte(Lucene54DocValuesFormat.SORTED);
         addTermsDict(field, values);
         addNumericField(field, docToOrd, NumberType.ORDINAL);
+        //写B+树
+        BplusTreeHelper.addValues(fieldIndex, field.name, values, docToOrd);
     }
 
     @Override
     public void addSortedNumericField(FieldInfo field, final Iterable<Number> docToValueCount, final Iterable<Number> values) throws IOException {
         meta.writeVInt(field.number);
         meta.writeByte(Lucene54DocValuesFormat.SORTED_NUMERIC);
+        Iterable<Number> didValues;
         if (isSingleValued(docToValueCount)) {
             meta.writeVInt(SORTED_SINGLE_VALUED);
             // The field is single-valued, we can encode it as NUMERIC
-            addNumericField(field, singletonView(docToValueCount, values, null));
+            didValues = singletonView(docToValueCount, values, null);
+            addNumericField(field, didValues, NumberType.VALUE);
         } else {
             final SortedSet<LongsRef> uniqueValueSets = uniqueValueSets(docToValueCount, values);
             if (uniqueValueSets != null) {
@@ -620,52 +616,54 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
                 writeDictionary(uniqueValueSets);
 
                 // write the doc -> set_id as a numeric field
-                addNumericField(field, docToSetId(uniqueValueSets, docToValueCount, values), NumberType.ORDINAL);
+                didValues = docToSetId(uniqueValueSets, docToValueCount, values);
+                addNumericField(field, didValues, NumberType.ORDINAL);
             } else {
                 meta.writeVInt(SORTED_WITH_ADDRESSES);
                 // write the stream of values as a numeric field
-                addNumericField(field, values, NumberType.VALUE);
+                didValues = values;
+                addNumericField(field, didValues, NumberType.VALUE);
                 // write the doc -> ord count as a absolute index to the stream
                 addOrdIndex(field, docToValueCount);
             }
         }
+        //写B+树
+        BplusTreeHelper.addValues(fieldIndex, field.name, values);
     }
 
     @Override
     public void addSortedSetField(FieldInfo field, Iterable<BytesRef> values, final Iterable<Number> docToOrdCount, final Iterable<Number> ords) throws IOException {
         meta.writeVInt(field.number);
         meta.writeByte(Lucene54DocValuesFormat.SORTED_SET);
-
         if (isSingleValued(docToOrdCount)) {
             meta.writeVInt(SORTED_SINGLE_VALUED);
             // The field is single-valued, we can encode it as SORTED
             addSortedField(field, values, singletonView(docToOrdCount, ords, -1L));
         } else {
+            Iterable<Number> didValues;
             final SortedSet<LongsRef> uniqueValueSets = uniqueValueSets(docToOrdCount, ords);
             if (uniqueValueSets != null) {
                 meta.writeVInt(SORTED_SET_TABLE);
-
                 // write the set_id -> ords mapping
                 writeDictionary(uniqueValueSets);
-
                 // write the ord -> byte[] as a binary field
                 addTermsDict(field, values);
-
                 // write the doc -> set_id as a numeric field
-                addNumericField(field, docToSetId(uniqueValueSets, docToOrdCount, ords), NumberType.ORDINAL);
+                didValues = docToSetId(uniqueValueSets, docToOrdCount, ords);
+                addNumericField(field, didValues, NumberType.ORDINAL);
             } else {
                 meta.writeVInt(SORTED_WITH_ADDRESSES);
-
                 // write the ord -> byte[] as a binary field
                 addTermsDict(field, values);
-
                 // write the stream of ords as a numeric field
                 // NOTE: we could return an iterator that delta-encodes these within a doc
+                didValues = ords;
                 addNumericField(field, ords, NumberType.ORDINAL);
-
                 // write the doc -> ord count as a absolute index to the stream
                 addOrdIndex(field, docToOrdCount);
             }
+            //写B+树
+            BplusTreeHelper.addValues(fieldIndex, field.name, values, didValues);
         }
     }
 
@@ -790,12 +788,18 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
             success = true;
         } finally {
             if (success) {
-                IOUtils.close(data, meta, index);
+                IOUtils.close(data, meta);
+                for(FieldBplusTree fieldBplusTree : fieldIndex.values()) {
+                    IOUtils.close(fieldBplusTree.getIndexOutput());
+                }
             } else {
-                IOUtils.closeWhileHandlingException(data, meta, index);
+                IOUtils.closeWhileHandlingException(data, meta);
+                for(FieldBplusTree fieldBplusTree : fieldIndex.values()) {
+                    IOUtils.closeWhileHandlingException(fieldBplusTree.getIndexOutput());
+                }
             }
             meta = data = null;
-            index = null;
+            fieldIndex = null;
         }
     }
 }

@@ -25,6 +25,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import static org.apache.lucene.util.unimas.PathUtil.reCreatePath;
+
 /**
  * A delegating Directory that records which files were
  * written to and deleted.
@@ -40,12 +42,7 @@ public final class TrackingDirectoryWrapper extends FilterDirectory {
     @Override
     public void deleteFile(String name) throws IOException {
 //        in.deleteFile(name);
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION)||name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        ||name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         tempDir.deleteFile(name);
         createdFileNames.remove(name);
     }
@@ -53,12 +50,7 @@ public final class TrackingDirectoryWrapper extends FilterDirectory {
     @Override
     public IndexOutput createOutput(String name, IOContext context) throws IOException {
 //        in.createOutput(name, context);
-        Directory tempDir = in;
-        if (PathUtil.newPath != null && PathUtil.newPath.length() > 0 &&
-                (name.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION)||name.endsWith(Lucene54DocValuesFormat.META_EXTENSION)
-                        ||name.endsWith(Lucene54DocValuesFormat.INDEX_EXTENSION))) {
-            tempDir = PathUtil.reCreatePath(in);
-        }
+        Directory tempDir = reCreatePath(name, in);
         IndexOutput output = tempDir.createOutput(name, context);
         createdFileNames.add(name);
         return output;
