@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Random;
+import java.util.Set;
 
 public class BplusTree<K extends Comparable<K>, V> {
 
@@ -84,19 +85,20 @@ public class BplusTree<K extends Comparable<K>, V> {
         //上下界都在一个node里
         if (smallNode.equals(bigNode)) {
             for (int i = small.getValue(); i <= big.getValue(); i++)
-                res.add(smallNode.entries_val.get(i));
+                res.addAll(smallNode.entries_val.get(i));
         }
         //上下界跨node
         else {
             for (int i = small.getValue(); i <= smallNode.entries_val.size() - 1; i++)
-                res.add(smallNode.entries_val.get(i));
+                res.addAll(smallNode.entries_val.get(i));
             smallNode = smallNode.next;
             while (!smallNode.equals(bigNode)) {
-                res.addAll(smallNode.entries_val);
+                for(Set<V> entries_val_val :smallNode.entries_val)
+                    res.addAll(entries_val_val);
                 smallNode = smallNode.next;
             }
             for (int i = 0; i <= big.getValue(); i++)
-                res.add(bigNode.entries_val.get(i));
+                res.addAll(bigNode.entries_val.get(i));
         }
         return res;
     }
@@ -113,10 +115,11 @@ public class BplusTree<K extends Comparable<K>, V> {
             return null;
         BplusNode<K, V> smallNode = small.getKey();
         for (int i = small.getValue(); i <= smallNode.entries_val.size() - 1; i++)
-            res.add(smallNode.entries_val.get(i));
+            res.addAll(smallNode.entries_val.get(i));
         smallNode = smallNode.next;
         while (smallNode != null) {
-            res.addAll(smallNode.entries_val);
+            for(Set<V> entries_val_val :smallNode.entries_val)
+                res.addAll(entries_val_val);
             smallNode = smallNode.next;
         }
         return res;
@@ -137,28 +140,29 @@ public class BplusTree<K extends Comparable<K>, V> {
         //上下界都在一个node里
         if (smallNode.equals(bigNode)) {
             for (int i = 0; i <= big.getValue(); i++)
-                res.add(smallNode.entries_val.get(i));
+                res.addAll(smallNode.entries_val.get(i));
         }
         //上下界跨node
         else {
             for (int i = 0; i <= smallNode.entries_val.size() - 1; i++)
-                res.add(smallNode.entries_val.get(i));
+                res.addAll(smallNode.entries_val.get(i));
             smallNode = smallNode.next;
             while (!smallNode.equals(bigNode)) {
-                res.addAll(smallNode.entries_val);
+                for(Set<V> entries_val_val :smallNode.entries_val)
+                    res.addAll(entries_val_val);
                 smallNode = smallNode.next;
             }
             for (int i = 0; i <= big.getValue(); i++)
-                res.add(bigNode.entries_val.get(i));
+                res.addAll(bigNode.entries_val.get(i));
         }
         return res;
     }
 
-    public V get(K key) {
+    public Set<V> get(K key) {
         return root.get(key);
     }
 
-    public V remove(K key) {
+    public Set<V> remove(K key) {
         return root.remove(key, this);
     }
 

@@ -23,6 +23,8 @@ import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.Version;
 import org.apache.lucene.util.unimas.PathUtil;
+import org.apache.lucene.util.unimas.UnimasConstant;
+import org.apache.lucene.util.unimas.UnimasIndexReader;
 
 import java.io.EOFException;
 import java.io.FileNotFoundException;
@@ -140,8 +142,6 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
      * Opaque Map&lt;String, String&gt; that user can specify during IndexWriter.commit
      */
     public Map<String, String> userData = Collections.emptyMap();
-    public static String indexName;
-    public static String shardName;
 
     private List<SegmentCommitInfo> segments = new ArrayList<>();
 
@@ -416,8 +416,14 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
         } else {
             infos.userData = Collections.unmodifiableMap(input.readStringStringMap());
         }
-        indexName = infos.userData.get("indexName");
-        shardName = infos.userData.get("shardName");
+
+//        infos.indexName = infos.userData.get("indexName");
+//        infos.shardName = infos.userData.get("shardName");
+//        infos.dvPath = infos.userData.get("dvPath");
+//        infos.dvIndices = infos.userData.get("dvIndices");
+//        infos.indexOrder = Integer.parseInt(infos.userData.get("indexOrder"));
+
+        UnimasConstant.putEsInfos(UnimasConstant.ESInfo.readSt(directory));
         CodecUtil.checkFooter(input);
 
         // LUCENE-6299: check we are in bounds
@@ -568,11 +574,22 @@ public final class SegmentInfos implements Cloneable, Iterable<SegmentCommitInfo
                 out.writeSetOfStrings(e.getValue());
             }
         }
-        Map.Entry<String, String> indexNameAndShard = PathUtil.getIndexNameAndShard(directory.toString());
-        if(indexNameAndShard!=null) {
-            userData.put("indexName", indexNameAndShard.getKey());
-            userData.put("shardName", indexNameAndShard.getValue());
-        }
+//        if(indexName==null && shardName==null) {
+//            Map.Entry<String, String> indexNameAndShard = PathUtil.getIndexNameAndShard(directory.toString());
+//            if(indexNameAndShard!=null) {
+//                userData.put("indexName", indexNameAndShard.getKey());
+//                userData.put("shardName", indexNameAndShard.getValue());
+//            }
+//        }
+//        if(dvIndices==null || dvPath==null) {
+//            UnimasIndexReader.MetaConfig metaConfig = UnimasIndexReader.getMetaConfig(PathUtil.stPath(PathUtil.getStPath(directory.toString())));
+//            if (metaConfig.getIndexs() != null && metaConfig.getIndexs().length() > 0)
+//                userData.put("dvIndices", metaConfig.getIndexs());
+//            if (metaConfig.getDvPath() != null && metaConfig.getDvPath().length() > 0)
+//                userData.put("dvPath", metaConfig.getDvPath());
+//            if (metaConfig.getIndexOrder() != null && metaConfig.getIndexOrder().length() > 0)
+//                userData.put("indexOrder", metaConfig.getIndexOrder());
+//        }
         out.writeMapOfStrings(userData);
         CodecUtil.writeFooter(out);
     }

@@ -16,27 +16,6 @@
  */
 package org.apache.lucene.index;
 
-import java.io.Closeable;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map.Entry;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
-
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.FieldInfosFormat;
@@ -48,28 +27,16 @@ import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.store.AlreadyClosedException;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FlushInfo;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.LockObtainFailedException;
-import org.apache.lucene.store.LockValidatingDirectoryWrapper;
-import org.apache.lucene.store.MMapDirectory;
-import org.apache.lucene.store.MergeInfo;
-import org.apache.lucene.store.TrackingDirectoryWrapper;
-import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.Constants;
-import org.apache.lucene.util.IOUtils;
-import org.apache.lucene.util.InfoStream;
-import org.apache.lucene.util.StringHelper;
-import org.apache.lucene.util.ThreadInterruptedException;
-import org.apache.lucene.util.UnicodeUtil;
-import org.apache.lucene.util.Version;
+import org.apache.lucene.store.*;
+import org.apache.lucene.util.*;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
   An <code>IndexWriter</code> creates and maintains an index.
@@ -793,6 +760,7 @@ public class IndexWriter implements Closeable, TwoPhaseCommit, Accountable {
       throw new IllegalArgumentException("Directory " + d + " still has pending deleted files; cannot initialize IndexWriter");
     }
 
+//    UnimasConstant.init(d);
     conf.setIndexWriter(this); // prevent reuse by other instances
     config = conf;
     infoStream = config.getInfoStream();

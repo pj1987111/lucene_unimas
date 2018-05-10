@@ -30,8 +30,10 @@ import org.apache.lucene.util.packed.DirectMonotonicWriter;
 import org.apache.lucene.util.packed.DirectWriter;
 import org.apache.lucene.util.packed.MonotonicBlockPackedWriter;
 import org.apache.lucene.util.packed.PackedInts;
+import org.apache.lucene.util.unimas.PathUtil;
 import org.apache.lucene.util.unimas.index.BplusTreeHelper;
 import org.apache.lucene.util.unimas.index.FieldBplusTree;
+import org.apache.lucene.util.unimas.UnimasIndexReader;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -57,8 +59,9 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
     }
 
     IndexOutput data, meta;
-    Map<String, FieldBplusTree> fieldIndex = new HashMap<>();
+    Map<String, FieldBplusTree> fieldIndex;
     final int maxDoc;
+    Map<String, String> fieldTypeMap = new HashMap<>();
 
     /**
      * expert: Creates a new writer
@@ -74,7 +77,8 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
             meta = state.directory.createOutput(metaName, state.context);
             CodecUtil.writeIndexHeader(meta, metaCodec, Lucene54DocValuesFormat.VERSION_CURRENT, state.segmentInfo.getId(), state.segmentSuffix);
             maxDoc = state.segmentInfo.maxDoc();
-            initFieldIndex(fieldIndex, state);
+
+            fieldIndex = new UnimasIndexReader(PathUtil.stPath(state.directory.toString()), state).initFieldIndex(fieldTypeMap);
             success = true;
         } finally {
             if (!success) {
@@ -83,25 +87,11 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
         }
     }
 
-    private void initFieldIndex(Map<String, FieldBplusTree> fieldIndex, SegmentWriteState state) throws IOException {
-        fieldIndex.put("name", initSingleBplusTree("name", FieldBplusTree.FieldType.STRING, state));
-        fieldIndex.put("create", initSingleBplusTree("create", FieldBplusTree.FieldType.INTEGER, state));
-        fieldIndex.put("age", initSingleBplusTree("age", FieldBplusTree.FieldType.INTEGER, state));
-    }
-
-    private FieldBplusTree initSingleBplusTree(String fieldName, FieldBplusTree.FieldType fieldType,
-                                               SegmentWriteState state) throws IOException {
-        String indexName = IndexFileNames.segmentFileName(state.segmentInfo.name,
-                state.segmentSuffix+"_"+fieldName, INDEX_EXTENSION);
-        IndexOutput indexOutput = state.directory.createOutput(indexName, state.context);
-        return new FieldBplusTree(fieldType, indexOutput);
-    }
-
     @Override
     public void addNumericField(FieldInfo field, Iterable<Number> values) throws IOException {
         addNumericField(field, values, NumberType.VALUE);
         //写B+树
-        BplusTreeHelper.addValues(fieldIndex, field.name, values);
+        BplusTreeHelper.addValues(fieldIndex, field.name, values, fieldTypeMap);
     }
 
     void addNumericField(FieldInfo field, Iterable<Number> values, NumberType numberType) throws IOException {
@@ -628,7 +618,7 @@ final class Lucene54DocValuesConsumer extends DocValuesConsumer implements Close
             }
         }
         //写B+树
-        BplusTreeHelper.addValues(fieldIndex, field.name, values);
+        BplusTreeHelper.addValues(fieldIndex, field.name, values, fieldTypeMap);
     }
 
     @Override

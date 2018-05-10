@@ -17,29 +17,21 @@
 package org.apache.lucene.index;
 
 
-import java.io.Closeable;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.nio.file.NoSuchFileException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.regex.Matcher;
-
-import org.apache.lucene.codecs.lucene54.Lucene54DocValuesFormat;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.CollectionUtil;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.InfoStream;
+import org.apache.lucene.util.unimas.PathUtil;
+import org.apache.lucene.util.unimas.UnimasConstant;
+
+import java.io.Closeable;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.file.NoSuchFileException;
+import java.util.*;
+import java.util.regex.Matcher;
 
 /*
  * This class keeps track of each SegmentInfos instance that
@@ -106,6 +98,7 @@ final class IndexFileDeleter implements Closeable {
 
     final boolean startingCommitDeleted;
     private SegmentInfos lastSegmentInfos;
+    private SegmentInfos thisSegmentInfos;
 
     /**
      * Change to true to see details of reference counts when
@@ -134,6 +127,7 @@ final class IndexFileDeleter implements Closeable {
         Objects.requireNonNull(writer);
         this.infoStream = infoStream;
         this.writer = writer;
+        this.thisSegmentInfos = segmentInfos;
 
         final String currentSegmentsFile = segmentInfos.getSegmentsFileName();
 
@@ -584,22 +578,17 @@ final class IndexFileDeleter implements Closeable {
      */
     void decRef(Collection<String> files) throws IOException {
         assert locked();
-//    boolean hasDvdFile = false;
-//    boolean hasDvmFile = false;
-//    String inxFile = "";
         Set<String> toDelete = new HashSet<>();
         Throwable firstThrowable = null;
+        Set<String> toDeleteSegment = new HashSet<>();
         for (final String file : files) {
             try {
                 if (decRef(file)) {
                     toDelete.add(file);
+                    String segmentPrefix = getSegmentPrefix(file);
+                    if (segmentPrefix != null)
+                        toDeleteSegment.add(segmentPrefix);
                 }
-//        if(file.endsWith(Lucene54DocValuesFormat.DATA_EXTENSION)) {
-//          hasDvdFile = true;
-//          inxFile = file.substring(0, file.indexOf(Lucene54DocValuesFormat.DATA_EXTENSION))+Lucene54DocValuesFormat.INDEX_EXTENSION;
-//        }
-//        if(file.endsWith(Lucene54DocValuesFormat.META_EXTENSION))
-//          hasDvmFile = true;
             } catch (Throwable t) {
                 if (firstThrowable == null) {
                     // Save first exception and throw it in the end, but be sure to finish decRef all files
@@ -608,10 +597,8 @@ final class IndexFileDeleter implements Closeable {
             }
         }
 
-//    if(hasDvdFile && hasDvmFile)
-//      toDelete.add(inxFile);
         try {
-            addIndexFiles(toDelete);
+            addIndexFiles(toDelete, toDeleteSegment, files);
             deleteFiles(toDelete);
         } catch (Throwable t) {
             if (firstThrowable == null) {
@@ -625,8 +612,50 @@ final class IndexFileDeleter implements Closeable {
         }
     }
 
-    private void addIndexFiles(Set<String> toDelete) throws IOException {
+    private String getSegmentPrefix(String file) {
+        String res = null;
+        if (file.startsWith("_")) {
+            String fileParts[] = file.split("_");
+            if (fileParts.length == 2) {
+                res = file.substring(0, file.lastIndexOf("."));
+            } else {
+                res = file.substring(0, file.indexOf("_", 1));
+            }
+        }
+        return res;
+    }
 
+    private void addIndexFiles(Set<String> toDelete, Set<String> toDeleteSegment, Collection<String> files) throws IOException {
+        if (toDeleteSegment.size() == 0)
+            return;
+        List<String> temp_files = new ArrayList<>();
+        for(String file : files)
+            temp_files.add(file);
+        temp_files.removeAll(toDelete);
+        //检查是否还有余下的段文件，有的话不能轻易删除inx
+        for(String file : temp_files)
+            for(String toDeleteSeg : toDeleteSegment)
+                if(file.startsWith(toDeleteSeg))
+                    toDeleteSegment.remove(toDeleteSeg);
+        if (toDeleteSegment.size() == 0)
+            return;
+
+        assert locked();
+        ensureOpen();
+
+        Map.Entry<String, String> indexShardEntry = PathUtil.getIndexNameAndShard(directory.toString());
+        UnimasConstant.ESInfo esInfo = null;
+        if(indexShardEntry!=null)
+            esInfo = UnimasConstant.getEsInfo(indexShardEntry.getKey(), directory);
+
+        String dvIndices = esInfo.dvIndices;
+        if(dvIndices!=null && dvIndices.length()>0) {
+            for (String indexName : dvIndices.split(";")) {
+                for (String singleDelete : toDeleteSegment) {
+                    toDelete.add(singleDelete + "_Lucene54_0_" + indexName + ".inx");
+                }
+            }
+        }
     }
 
     /**

@@ -2,8 +2,10 @@ package org.apache.lucene.util.unimas.index;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Set;
 
 public class BplusNode<K extends Comparable<K>, V> {
 
@@ -35,12 +37,12 @@ public class BplusNode<K extends Comparable<K>, V> {
     /**
      * 节点的关键字
      */
-    protected List<Entry<K, V>> entries;
+    protected List<Entry<K, Set<V>>> entries;
 
     /**
      * 节点值
      */
-    protected List<V> entries_val;
+    protected List<Set<V>> entries_val;
 
     /**
      * 子节点
@@ -80,7 +82,7 @@ public class BplusNode<K extends Comparable<K>, V> {
             int comp;
             while (low <= high) {
                 mid = (low + high) / 2;
-                Entry<K, V> midEntry = entries.get(mid);
+                Entry<K, Set<V>> midEntry = entries.get(mid);
                 comp = midEntry.getKey().compareTo(key);
                 if (comp == 0) {
                     return new SimpleEntry<>(this, mid);
@@ -147,7 +149,7 @@ public class BplusNode<K extends Comparable<K>, V> {
             int comp;
             while (low <= high) {
                 mid = (low + high) / 2;
-                Entry<K, V> midEntry = entries.get(mid);
+                Entry<K, Set<V>> midEntry = entries.get(mid);
                 comp = midEntry.getKey().compareTo(key);
                 if (comp == 0) {
                     return new SimpleEntry<>(this, mid);
@@ -199,7 +201,7 @@ public class BplusNode<K extends Comparable<K>, V> {
         }
     }
 
-    public V get(K key) {
+    public Set<V> get(K key) {
         //如果是叶子节点
         if (isLeaf) {
             int low = 0, high = entries.size() - 1, mid;
@@ -354,8 +356,10 @@ public class BplusNode<K extends Comparable<K>, V> {
             if (leftSize != 0) {
                 leftSize--;
                 if (!b && entries.get(i).getKey().compareTo(key) > 0) {
-                    left.entries.add(new SimpleEntry<>(key, value));
-                    left.entries_val.add(value);
+                    Set<V> vals = new HashSet<>();
+                    vals.add(value);
+                    left.entries.add(new SimpleEntry<>(key, vals));
+                    left.entries_val.add(vals);
                     b = true;
                     i--;
                 } else {
@@ -364,8 +368,10 @@ public class BplusNode<K extends Comparable<K>, V> {
                 }
             } else {
                 if (!b && entries.get(i).getKey().compareTo(key) > 0) {
-                    right.entries.add(new SimpleEntry<>(key, value));
-                    right.entries_val.add(value);
+                    Set<V> vals = new HashSet<>();
+                    vals.add(value);
+                    right.entries.add(new SimpleEntry<>(key, vals));
+                    right.entries_val.add(vals);
                     b = true;
                     i--;
                 } else {
@@ -375,8 +381,10 @@ public class BplusNode<K extends Comparable<K>, V> {
             }
         }
         if (!b) {
-            right.entries.add(new SimpleEntry<>(key, value));
-            right.entries_val.add(value);
+            Set<V> vals = new HashSet<>();
+            vals.add(value);
+            right.entries.add(new SimpleEntry<>(key, vals));
+            right.entries_val.add(vals);
         }
     }
 
@@ -589,7 +597,7 @@ public class BplusNode<K extends Comparable<K>, V> {
         }
     }
 
-    public V remove(K key, BplusTree<K, V> tree) {
+    public Set<V> remove(K key, BplusTree<K, V> tree) {
         //如果是叶子节点
         if (isLeaf) {
             //如果不包含该关键字，则直接返回
@@ -639,7 +647,7 @@ public class BplusNode<K extends Comparable<K>, V> {
                     && previous.parent == parent
                     && (previous.entries.size() <= tree.getOrder() / 2
                     || previous.entries.size() <= 2)) {
-                V returnValue = remove(key);
+                Set<V> returnValue = remove(key);
                 for (int i = 0; i < entries.size(); i++) {
                     //将当前节点的关键字添加到前节点的末尾
                     previous.entries.add(entries.get(i));
@@ -678,7 +686,7 @@ public class BplusNode<K extends Comparable<K>, V> {
                     && next.parent == parent
                     && (next.entries.size() <= tree.getOrder() / 2
                     || next.entries.size() <= 2)) {
-                V returnValue = remove(key);
+                Set<V> returnValue = remove(key);
                 for (int i = 0; i < next.entries.size(); i++) {
                     //从首位开始添加到末尾
                     entries.add(next.entries.get(i));
@@ -769,8 +777,14 @@ public class BplusNode<K extends Comparable<K>, V> {
             mid = (low + high) / 2;
             comp = entries.get(mid).getKey().compareTo(key);
             if (comp == 0) {
-                entries.get(mid).setValue(value);
-                entries_val.set(mid, value);
+                Entry<K, Set<V>> entryVal = entries.get(mid);
+                Set<V> vals = entryVal.getValue();
+                vals.add(value);
+
+                Set<V> entryVal2 = entries_val.get(mid);
+                entryVal2.add(value);
+//                entries.get(mid).setValue(value);
+//                entries_val.set(mid, value);
                 break;
             } else if (comp < 0) {
                 low = mid + 1;
@@ -779,15 +793,17 @@ public class BplusNode<K extends Comparable<K>, V> {
             }
         }
         if (low > high) {
-            entries.add(low, new SimpleEntry<>(key, value));
-            entries_val.add(low, value);
+            Set<V> vals = new HashSet<>();
+            vals.add(value);
+            entries.add(low, new SimpleEntry<>(key, vals));
+            entries_val.add(low, vals);
         }
     }
 
     /**
      * 删除节点
      */
-    protected V remove(K key) {
+    protected Set<V> remove(K key) {
         int low = 0, high = entries.size() - 1, mid;
         int comp;
         while (low <= high) {
@@ -834,7 +850,7 @@ public class BplusNode<K extends Comparable<K>, V> {
         sb.append(isLeaf);
         sb.append(", ");
         sb.append("keys: ");
-        for (Entry<K, V> entry : entries) {
+        for (Entry<K, Set<V>> entry : entries) {
             sb.append(entry.getKey());
             sb.append("-->");
             sb.append(entry.getValue());

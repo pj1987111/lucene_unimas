@@ -17,13 +17,15 @@
 package org.apache.lucene.store;
 
 
-import org.apache.lucene.codecs.lucene54.Lucene54DocValuesFormat;
+import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.util.unimas.PathUtil;
+import org.apache.lucene.util.unimas.UnimasConstant;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import static org.apache.lucene.util.unimas.PathUtil.*;
 
@@ -101,8 +103,13 @@ public abstract class FilterDirectory extends Directory {
     public void sync(Collection<String> names) throws IOException {
         List<String> newPathDocValues = new ArrayList<>();
         List<String> others = new ArrayList<>();
+        Map.Entry<String, String> indexShardEntry = PathUtil.getIndexNameAndShard(in.toString());
+        UnimasConstant.ESInfo esInfo = null;
+        if(indexShardEntry!=null)
+            esInfo = UnimasConstant.getEsInfo(indexShardEntry.getKey(), in);
+
         for (String name : names) {
-            if(isDocValuesOrIndexFiles(name)) {
+            if(esInfo!=null && isDocValuesOrIndexFiles(esInfo, name)) {
                 newPathDocValues.add(name);
             } else
                 others.add(name);
@@ -110,7 +117,7 @@ public abstract class FilterDirectory extends Directory {
 //        in.sync(names);
         in.sync(others);
         if(newPathDocValues!=null)
-            PathUtil.reCreatePath(in).sync(newPathDocValues);
+            PathUtil.reCreatePath(esInfo, in).sync(newPathDocValues);
     }
 
     @Override

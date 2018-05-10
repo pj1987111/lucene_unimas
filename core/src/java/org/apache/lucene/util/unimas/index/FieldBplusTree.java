@@ -5,8 +5,7 @@ import org.apache.lucene.store.IndexOutput;
 
 import java.io.IOException;
 import java.util.List;
-
-import static org.apache.lucene.util.unimas.UnimasConstant.order;
+import java.util.Set;
 
 /**
  * Created by zhy on 2018/4/18.
@@ -14,71 +13,99 @@ import static org.apache.lucene.util.unimas.UnimasConstant.order;
 public class FieldBplusTree {
     public enum FieldType {
         INTEGER,
+        DOUBLE,
         STRING
     }
 
     private FieldType fieldType;
     private IndexOutput indexOutput;
-    private BplusTree<String, Long> stringBplusTree;
-    private BplusTree<Long, Long> integerBplusTree;
+    private BplusTree<String, Integer> stringBplusTree;
+    private BplusTree<Long, Integer> integerBplusTree;
+    private BplusTree<Double, Integer> doubleBplusTree;
 
+    //lucene写时使用
     public FieldBplusTree(FieldType fieldType, IndexOutput indexOutput) throws IOException {
         this.fieldType = fieldType;
         this.indexOutput = indexOutput;
         if (fieldType == FieldType.INTEGER) {
-            integerBplusTree = new BplusTree<>(order);
-            indexOutput.writeByte((byte)0);
+            indexOutput.writeByte((byte) 0);
+        } else if (fieldType == FieldType.DOUBLE) {
+            indexOutput.writeByte((byte) 2);
         } else {
-            stringBplusTree = new BplusTree<>(order);
-            indexOutput.writeByte((byte)1);
+            indexOutput.writeByte((byte) 1);
         }
     }
 
+    //lucene读时使用
     public FieldBplusTree() {
     }
 
-    public FieldBplusTree initData(IndexInput indexInput) throws IOException {
+    public FieldBplusTree initData(IndexInput indexInput, int indexOrder) throws IOException {
         byte startCode = indexInput.readByte();
         long length = indexInput.length();
         long pointer;
-        if(startCode == (byte)0) {
+        if (startCode == (byte) 0) {
             this.fieldType = FieldType.INTEGER;
-            integerBplusTree = new BplusTree<>(order);
-            for(pointer = 0L; pointer<length;) {
+            integerBplusTree = new BplusTree<>(indexOrder);
+            for (pointer = 0L; pointer < length; ) {
                 long val = indexInput.readLong();
-                long docid = indexInput.readLong();
+                int docid = indexInput.readInt();
                 pointer = indexInput.getFilePointer();
-                integerBplusTree.insertOrUpdate(val, docid);
+                try {
+                    integerBplusTree.insertOrUpdate(val, docid);
+                } catch (RuntimeException e) {
+                    e.printStackTrace();
+                }
             }
-        } else if(startCode == (byte)1) {
+        } else if (startCode == (byte) 1) {
             this.fieldType = FieldType.STRING;
-            stringBplusTree = new BplusTree<>(order);
-            for(pointer = 0L; pointer<length;) {
+            stringBplusTree = new BplusTree<>(indexOrder);
+            for (pointer = 0L; pointer < length; ) {
                 int valLength = indexInput.readInt();
                 byte[] val = new byte[valLength];
                 indexInput.readBytes(val, 0, valLength);
-                long docid = indexInput.readLong();
+                int docid = indexInput.readInt();
                 pointer = indexInput.getFilePointer();
                 stringBplusTree.insertOrUpdate(new String(val), docid);
+            }
+        } else if (startCode == (byte) 2) {
+            this.fieldType = FieldType.DOUBLE;
+            doubleBplusTree = new BplusTree<>(indexOrder);
+            for (pointer = 0L; pointer < length; ) {
+                int valLength = indexInput.readInt();
+                byte[] val = new byte[valLength];
+                indexInput.readBytes(val, 0, valLength);
+                int docid = indexInput.readInt();
+                pointer = indexInput.getFilePointer();
+                try {
+                    doubleBplusTree.insertOrUpdate(Double.parseDouble(new String(val)), docid);
+                } catch (RuntimeException e) {
+                    e.printStackTrace();
+                }
             }
         }
         return this;
     }
 
     //todo 异步
-    protected void add(Object val, long docid) throws IOException {
+    protected void add(Object val, int docid) throws IOException {
         if (fieldType == FieldType.INTEGER) {
             if (val instanceof Number) {
-                integerBplusTree.insertOrUpdate(Long.parseLong("" + val), docid);
                 indexOutput.writeLong(Long.parseLong("" + val));
-                indexOutput.writeLong(docid);
+                indexOutput.writeInt(docid);
             } else
-                throw new IOException("val : " + val + " is not NUMBER TYPE but bplus tree's type is number");
+                throw new IOException("val : " + val + " is not INTEGER TYPE but bplus tree's type is integer");
+        } else if (fieldType == FieldType.DOUBLE) {
+            if (val instanceof Number) {
+                indexOutput.writeInt(("" + val).length());
+                indexOutput.writeBytes(("" + val).getBytes(), 0, ("" + val).length());
+                indexOutput.writeInt(docid);
+            } else
+                throw new IOException("val : " + val + " is not DOUBLE TYPE but bplus tree's type is double");
         } else {
-            stringBplusTree.insertOrUpdate("" + val, docid);
             indexOutput.writeInt(("" + val).length());
             indexOutput.writeBytes(("" + val).getBytes(), 0, ("" + val).length());
-            indexOutput.writeLong(docid);
+            indexOutput.writeInt(docid);
         }
     }
 
@@ -86,38 +113,78 @@ public class FieldBplusTree {
         return indexOutput;
     }
 
-    public List<Long> getRange(Object start, Object end) {
-        if(start instanceof Number && end instanceof Number && fieldType == FieldType.INTEGER) {
-            return integerBplusTree.getRange(Long.parseLong(""+start), Long.parseLong(""+end));
-        } else if(fieldType == FieldType.STRING) {
-            return stringBplusTree.getRange(""+start, ""+end);
+    public List<Integer> getRange(Object start, Object end) {
+        if (fieldType == FieldType.INTEGER) {
+            try {
+                return integerBplusTree.getRange(Long.parseLong("" + start), Long.parseLong("" + end));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.DOUBLE) {
+            try {
+                return doubleBplusTree.getRange(Double.parseDouble("" + start), Double.parseDouble("" + end));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.STRING) {
+            return stringBplusTree.getRange("" + start, "" + end);
         }
         return null;
     }
 
-    public List<Long> getRangeStart(Object start) {
-        if(start instanceof Number && fieldType == FieldType.INTEGER) {
-            return integerBplusTree.getRangeStart(Long.parseLong(""+start));
-        } else if(fieldType == FieldType.STRING) {
-            return stringBplusTree.getRangeStart(""+start);
+    public List<Integer> getRangeStart(Object start) {
+        if (fieldType == FieldType.INTEGER) {
+            try {
+                return integerBplusTree.getRangeStart(Long.parseLong("" + start));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.DOUBLE) {
+            try {
+                return doubleBplusTree.getRangeStart(Double.parseDouble("" + start));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.STRING) {
+            return stringBplusTree.getRangeStart("" + start);
         }
         return null;
     }
 
-    public List<Long> getRangeEnd(Object end) {
-        if(end instanceof Number && fieldType == FieldType.INTEGER) {
-            return integerBplusTree.getRangeEnd(Long.parseLong(""+end));
-        } else if(fieldType == FieldType.STRING) {
-            return stringBplusTree.getRangeEnd(""+end);
+    public List<Integer> getRangeEnd(Object end) {
+        if (fieldType == FieldType.INTEGER) {
+            try {
+                return integerBplusTree.getRangeEnd(Long.parseLong("" + end));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.DOUBLE) {
+            try {
+                return doubleBplusTree.getRangeEnd(Double.parseDouble("" + end));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.STRING) {
+            return stringBplusTree.getRangeEnd("" + end);
         }
         return null;
     }
 
-    public Long get(Object val) {
-        if(val instanceof Number && fieldType == FieldType.INTEGER) {
-            return integerBplusTree.get(Long.parseLong(""+val));
-        } else if(fieldType == FieldType.STRING) {
-            return stringBplusTree.get(""+val);
+    public Set<Integer> get(Object val) {
+        if (fieldType == FieldType.INTEGER) {
+            try {
+                return integerBplusTree.get(Long.parseLong("" + val));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.DOUBLE) {
+            try {
+                return doubleBplusTree.get(Double.parseDouble("" + val));
+            } catch (RuntimeException e) {
+                e.printStackTrace();
+            }
+        } else if (fieldType == FieldType.STRING) {
+            return stringBplusTree.get("" + val);
         }
         return null;
     }
